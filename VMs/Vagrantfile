@@ -1,0 +1,56 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby  :
+$scriptUbuntu = <<-EOF
+sudo apt update
+sudo apt upgrade  -y
+EOF
+
+$scriptCentos = <<-EOF
+sudo yum update
+sudo yum upgrade -y
+sudo yum install epel-release -y
+EOF
+
+### configuration parameters ###
+# enderecamento IP da rede local
+LOCAL_REDE = "192.168.15."
+
+machines = {
+  "linux01" => {"net" => "public",  "domain" => "local.test", "memory" => "1024", "cpu" => "2", "ip" => "5", "image" => "ubuntu/jammy64"},#ubuntu 22
+  "linux02" => {"net" => "private", "domain" => "local.test", "memory" => "1024", "cpu" => "2", "ip" => "6", "image" => "ubuntu/jammy64"},
+  "linux03" => {"net" => "private", "domain" => "local.test", "memory" => "1024", "cpu" => "2", "ip" => "7", "image" => "ubuntu/focal64"},#ubuntu 20
+  "linux04" => {"net" => "private", "domain" => "local.test", "memory" => "1024", "cpu" => "2", "ip" => "8", "image" => "centos/7"}
+}
+
+Vagrant.configure("2") do |config|
+
+  machines.each do |name, conf|
+    config.vm.define "#{name}" do |machine|
+      machine.vm.box = "#{conf["image"]}"
+      machine.vm.hostname = "#{name}.#{conf["domain"]}"
+
+      if "#{conf["net"]}" == "public"
+        machine.vm.network "public_network", ip: LOCAL_REDE + "#{conf["ip"]}", bridge: "en0: Ethernet"
+      else
+        machine.vm.network "private_network", ip: "10.0.0.#{conf["ip"]}"
+      end
+
+      #Mapeamento de uma pasta do host para a VM
+      machine.vm.synced_folder "/Users/mauro/Projetos", "/home/vagrant/Projetos", type: "virtualbox"
+      
+      machine.vm.provider "virtualbox" do |vb|
+        vb.name = "#{name}"
+        vb.memory = conf["memory"]
+        vb.cpus = conf["cpu"]
+        vb.customize ["modifyvm", :id, "--groups", "/LocalVMs"]
+      end
+      if "#{conf["image"]}" == "centos/7"
+        machine.vm.provision "shell", inline: $scriptCentos
+      end
+      if "#{conf["image"]}" == "ubuntu/jammy64"
+        machine.vm.provision "shell", inline: $scriptUbuntu
+      end
+      machine.vm.provision "shell", path: "provision.sh"
+    end
+  end
+end
